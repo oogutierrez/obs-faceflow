@@ -51,7 +51,7 @@ Extract the downloaded zip file.
 
 ### 3. Start Local Server
 
-Open your terminal or command line and cd to the project directory where you can find the index.hmtl file.
+Open your terminal or command line and cd to the project directory where you can find the index.html file.
 
 Run the following command in your project directory:
 
