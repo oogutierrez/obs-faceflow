@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FaceFlow</title>
+    <script src="./js/react.production.min.js"></script>
+    <script src="./js/react-dom.production.min.js"></script>
+    <script src="./js/babel.min.js"></script>
+    <script src="./js/tf.min.js"></script>
+    <script src="./js/pose-detection.min.js"></script>
+    <script src="css/tailwind.min.css"></script>
+</head>
+<body>
+    <div id="root"></div>
+    
+    <script type="text/babel">
+        const { useState, useRef, useEffect } = React;
+
+        // Lucide icons as inline SVG
+        const Camera = () => (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"></path>
+                <circle cx="12" cy="13" r="3"></circle>
+            </svg>
+        );
+
+        const RefreshCw = () => (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <polyline points="1 20 1 14 7 14"></polyline>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+        );
+
+        const Play = () => (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+        );
+
+        const Square = () => (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+            </svg>
+        );
+
+        const Settings = () => (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M12 1v6m0 6v6m5.66-13.66l-4.24 4.24m0 6l-4.24 4.24M23 12h-6m-6 0H1m17.66 5.66l-4.24-4.24m0-6l-4.24-4.24"></path>
+            </svg>
+        );
+
+        const Monitor = () => (
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                <line x1="8" y1="21" x2="16" y2="21"></line>
+                <line x1="12" y1="17" x2="12" y2="21"></line>
+            </svg>
+        );
+
+        const OBSTrackerApp = () => {
+            const [obsHost, setObsHost] = useState(localStorage.getItem('obsHost') || 'localhost');
+            const [obsPort, setObsPort] = useState(parseInt(localStorage.getItem('obsPort')) || 4455);
+            const [obsPassword, setObsPassword] = useState(localStorage.getItem('obsPassword') || '');
+            const [mainScene, setMainScene] = useState(localStorage.getItem('mainScene') || 'main');
+            const [secondaryScene, setSecondaryScene] = useState(localStorage.getItem('secondaryScene') || 'secondary');
+            const [scenes, setScenes] = useState(JSON.parse(localStorage.getItem('scenes') || '["main", "secondary"]'));
+            
+            const [switchDelay, setSwitchDelay] = useState(parseFloat(localStorage.getItem('switchDelay')) || 2.0);
+            const [horizontalThreshold, setHorizontalThreshold] = useState(parseFloat(localStorage.getItem('horizontalThreshold')) || 33.33);
+            const [verticalThreshold, setVerticalThreshold] = useState(parseFloat(localStorage.getItem('verticalThreshold')) || 66.67);
+            const [isTracking, setIsTracking] = useState(false);
+            const [cameraActive, setCameraActive] = useState(false);
+            const [status, setStatus] = useState('Idle');
+            const [currentScene, setCurrentScene] = useState(null);
+            const [availableCameras, setAvailableCameras] = useState([]);
+            const [selectedCamera, setSelectedCamera] = useState(localStorage.getItem('selectedCamera') || '');
+            
+            const videoRef = useRef(null);
+            const canvasRef = useRef(null);
+            const wsRef = useRef(null);
+            const streamRef = useRef(null);
+            const poseDetectorRef = useRef(null);
+            const lastSwitchTimeRef = useRef(0);
+            const animationFrameRef = useRef(null);
+            const horizontalThresholdRef = useRef(horizontalThreshold);
+            const verticalThresholdRef = useRef(verticalThreshold);
+            const switchDelayRef = useRef(switchDelay);
+            const mainSceneRef = useRef(mainScene);
+            const secondarySceneRef = useRef(secondaryScene);
+
+            useEffect(() => {
+                horizontalThresholdRef.current = horizontalThreshold;
+            }, [horizontalThreshold]);
+
+            useEffect(() => {
+                verticalThresholdRef.current = verticalThreshold;
+            }, [verticalThreshold]);
+
+            useEffect(() => {
+                switchDelayRef.current = switchDelay;
+            }, [switchDelay]);
+
+            useEffect(() => {
+                mainSceneRef.current = mainScene;
+            }, [mainScene]);
+
+            useEffect(() => {
+                secondarySceneRef.current = secondaryScene;
+            }, [secondaryScene]);
+
+            // Persist settings to localStorage
+            useEffect(() => { localStorage.setItem('obsHost', obsHost); }, [obsHost]);
+            useEffect(() => { localStorage.setItem('obsPort', obsPort.toString()); }, [obsPort]);
+            useEffect(() => { localStorage.setItem('obsPassword', obsPassword); }, [obsPassword]);
+            useEffect(() => { localStorage.setItem('mainScene', mainScene); }, [mainScene]);
+            useEffect(() => { localStorage.setItem('secondaryScene', secondaryScene); }, [secondaryScene]);
+            useEffect(() => { localStorage.setItem('scenes', JSON.stringify(scenes)); }, [scenes]);
+            useEffect(() => { localStorage.setItem('switchDelay', switchDelay.toString()); }, [switchDelay]);
+            useEffect(() => { localStorage.setItem('horizontalThreshold', horizontalThreshold.toString()); }, [horizontalThreshold]);
+            useEffect(() => { localStorage.setItem('verticalThreshold', verticalThreshold.toString()); }, [verticalThreshold]);
+            useEffect(() => { localStorage.setItem('selectedCamera', selectedCamera); }, [selectedCamera]);
+
+            useEffect(() => {
+                // Load available cameras on mount
+                loadCameras();
+// 🔄 Listen for permission or device changes
+    navigator.mediaDevices.addEventListener('devicechange', loadCameras);
+
+    // 🧹 Clean up listener when component unmounts
+    return () => {
+        navigator.mediaDevices.removeEventListener('devicechange', loadCameras);
+    };
+            }, []);
+
+    const loadCameras = async () => {
+        try {
+            // Ask for permission if not granted
+            await navigator.mediaDevices.getUserMedia({ video: true });
+
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const videoDevices = devices.filter(device => device.kind === 'videoinput');
+            setAvailableCameras(videoDevices);
+
+            // Detect the currently active camera
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            const track = stream.getVideoTracks()[0];
+            const currentDeviceId = track.getSettings().deviceId;
+
+            // Stop the temporary stream (we only needed info)
+            stream.getTracks().forEach(t => t.stop());
+
+            // Update selected camera
+            setSelectedCamera(currentDeviceId || (videoDevices[0]?.deviceId ?? ''));
+        } catch (error) {
+            console.error('Failed to enumerate cameras:', error);
+            setStatus('Failed to load cameras');
+        }
+    };
+
+            useEffect(() => {
+                const loadPoseDetection = async () => {
+                    if (window.tf && window.poseDetection) {
+                        try {
+                            // Wait for TensorFlow to be ready and set backend
+                            await window.tf.ready();
+                            await window.tf.setBackend('webgl');
+                            
+                            const detector = await window.poseDetection.createDetector(
+                                window.poseDetection.SupportedModels.MoveNet,
+                                { 
+                                    modelType: window.poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING,
+                                    modelUrl: './models/movenet/singlepose/lightning/model.json'
+                                }
+                            );
+                            poseDetectorRef.current = detector;
+                            console.log('Pose detector loaded successfully');
+                            setStatus('Pose detector ready');
+                        } catch (error) {
+                            console.error('Failed to load pose detector:', error);
+                            setStatus('Pose detector failed - check console');
+                        }
+                    }
+                };
+                setTimeout(loadPoseDetection, 2000);
+            }, []);
+
+            useEffect(() => {
+                if (cameraActive) {
+                    console.log('Camera active, starting preview');
+                    drawPreview();
+                }
+            }, [cameraActive]);
+
+            useEffect(() => {
+                // Restart draw loop when tracking state changes
+                if (cameraActive) {
+                    if (animationFrameRef.current) {
+                        cancelAnimationFrame(animationFrameRef.current);
+                        animationFrameRef.current = null;
+                    }
+                    drawPreview();
+                }
+            }, [isTracking]);
+
+            const connectOBS = async () => {
+                try {
+                    const wsUrl = `ws://${obsHost}:${obsPort}`;
+                    console.log('Connecting to OBS at:', wsUrl);
+                    const ws = new WebSocket(wsUrl);
+                    
+                    return new Promise((resolve, reject) => {
+                        let resolved = false;
+                        
+                        ws.onopen = () => {
+                            console.log('WebSocket opened');
+                        };
+
+                        ws.onmessage = async (event) => {
+                            const data = JSON.parse(event.data);
+                            console.log('OBS Message:', data);
+                            
+                            // op: 0 is Hello message from OBS
+                            if (data.op === 0) {
+                                console.log('Received Hello from OBS');
+                                
+                                const identifyMsg = {
+                                    op: 1,
+                                    d: { 
+                                        rpcVersion: 1
+                                    }
+                                };
+                                
+                                // Handle authentication if required
+                                if (data.d.authentication && obsPassword) {
+                                    const { challenge, salt } = data.d.authentication;
+                                    
+                                    // Create SHA256 hash: Base64(SHA256(password + salt))
+                                    const secret = obsPassword + salt;
+                                    const secretHash = await sha256(secret);
+                                    const secretBase64 = btoa(String.fromCharCode(...new Uint8Array(secretHash)));
+                                    
+                                    // Create authentication string: Base64(SHA256(secretBase64 + challenge))
+                                    const authString = secretBase64 + challenge;
+                                    const authHash = await sha256(authString);
+                                    const authBase64 = btoa(String.fromCharCode(...new Uint8Array(authHash)));
+                                    
+                                    identifyMsg.d.authentication = authBase64;
+                                    console.log('Using authenticated connection');
+                                } else if (data.d.authentication && !obsPassword) {
+                                    console.warn('OBS requires password but none provided');
+                                } else {
+                                    console.log('No authentication required');
+                                }
+                                
+                                ws.send(JSON.stringify(identifyMsg));
+                                console.log('Sent Identify');
+                            }
+                            
+                            // op: 2 is Identified (connection successful)
+                            if (data.op === 2 && !resolved) {
+                                console.log('Successfully identified with OBS');
+                                resolved = true;
+                                resolve(ws);
+                            }
+                        };
+
+                        ws.onerror = (error) => {
+                            console.error('WebSocket error:', error);
+                            setStatus('OBS connection failed');
+                            if (!resolved) {
+                                reject(error);
+                            }
+                        };
+
+                        ws.onclose = (event) => {
+                            console.log('WebSocket closed:', event.code, event.reason);
+                            if (!resolved) {
+                                reject(new Error(`Connection closed: ${event.reason || 'Unknown reason'}`));
+                            }
+                        };
+
+                        setTimeout(() => {
+                            if (!resolved) {
+                                reject(new Error('Connection timeout - check OBS WebSocket settings'));
+                            }
+                        }, 10000);
+                    });
+                } catch (error) {
+                    console.error('OBS connection failed:', error);
+                    setStatus('OBS connection failed');
+                    return null;
+                }
+            };
+
+            // SHA256 helper function
+            const sha256 = async (message) => {
+                const msgBuffer = new TextEncoder().encode(message);
+                const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+                return hashBuffer;
+            };
+
+            const refreshScenes = async () => {
+                setStatus('Fetching scenes from OBS...');
+                
+                try {
+                    const ws = await connectOBS();
+                    if (!ws) {
+                        setStatus('Failed to connect to OBS');
+                        return;
+                    }
+
+                    // Request scene list
+                    const requestId = Date.now().toString();
+                    ws.send(JSON.stringify({
+                        op: 6,
+                        d: {
+                            requestType: 'GetSceneList',
+                            requestId: requestId
+                        }
+                    }));
+
+                    // Listen for response
+                    ws.onmessage = (event) => {
+                        const data = JSON.parse(event.data);
+                        
+                        if (data.op === 7 && data.d.requestId === requestId) {
+                            const sceneNames = data.d.responseData.scenes.map(s => s.sceneName);
+                            setScenes(sceneNames);
+                            setStatus(`Found ${sceneNames.length} scenes`);
+                            
+                            if (sceneNames.length > 0) {
+                                if (!mainScene || !sceneNames.includes(mainScene)) {
+                                    setMainScene(sceneNames[0]);
+                                }
+                                if (!secondaryScene || !sceneNames.includes(secondaryScene)) {
+                                    setSecondaryScene(sceneNames[1] || sceneNames[0]);
+                                }
+                            }
+                            
+                            ws.close();
+                        }
+                    };
+                } catch (error) {
+                    console.error('Failed to fetch scenes:', error);
+                    setStatus('Failed to fetch scenes from OBS');
+                }
+            };
+
+            const startCamera = async () => {
+                try {
+                    if (!selectedCamera) {
+                        setStatus('Please select a camera first');
+                        return;
+                    }
+                    
+                    const constraints = {
+                        video: { 
+                            deviceId: { exact: selectedCamera },
+                            width: 1280, 
+                            height: 720 
+                        }
+                    };
+                    
+                    const selectedDevice = availableCameras.find(cam => cam.deviceId === selectedCamera);
+                    if (selectedDevice) {
+                        setStatus(`Using: ${selectedDevice.label}`);
+                    }
+                    
+                    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                    
+                    if (videoRef.current) {
+                        videoRef.current.srcObject = stream;
+                        streamRef.current = stream;
+                        
+                        videoRef.current.onloadedmetadata = () => {
+                            console.log('Video metadata loaded:', videoRef.current.videoWidth, 'x', videoRef.current.videoHeight);
+                            setCameraActive(true);
+                        };
+                        
+                        // Also try to play the video explicitly
+                        videoRef.current.play().catch(e => console.error('Play failed:', e));
+                    }
+                } catch (error) {
+                    console.error('Camera access failed:', error);
+                    setStatus('Camera access denied');
+                }
+            };
+
+            const stopCamera = () => {
+                if (streamRef.current) {
+                    streamRef.current.getTracks().forEach(track => track.stop());
+                    streamRef.current = null;
+                    setCameraActive(false);
+                    setStatus('Camera stopped');
+                    if (animationFrameRef.current) {
+                        cancelAnimationFrame(animationFrameRef.current);
+                        animationFrameRef.current = null;
+                    }
+                }
+            };
+
+            const drawPreview = () => {
+                if (animationFrameRef.current) {
+                    cancelAnimationFrame(animationFrameRef.current);
+                }
+                
+                const draw = () => {
+                    const video = videoRef.current;
+                    const canvas = canvasRef.current;
+                    
+                    if (!video || !canvas || !cameraActive) {
+                        return;
+                    }
+
+                    const ctx = canvas.getContext('2d');
+                    const width = video.videoWidth || 640;
+                    const height = video.videoHeight || 480;
+
+                    if (canvas.width !== width) canvas.width = width;
+                    if (canvas.height !== height) canvas.height = height;
+
+                    ctx.drawImage(video, 0, 0, width, height);
+
+                    const leftBound = canvas.width * (horizontalThresholdRef.current / 100);
+                    const rightBound = canvas.width * (1 - horizontalThresholdRef.current / 100);
+                    const verticalMid = canvas.height * (verticalThresholdRef.current / 100);
+
+                    ctx.strokeStyle = '#FFFF00';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(leftBound, 0);
+                    ctx.lineTo(leftBound, canvas.height);
+                    ctx.stroke();
+
+                    ctx.beginPath();
+                    ctx.moveTo(rightBound, 0);
+                    ctx.lineTo(rightBound, canvas.height);
+                    ctx.stroke();
+
+                    ctx.strokeStyle = '#00FFFF';
+                    ctx.beginPath();
+                    ctx.moveTo(0, verticalMid);
+                    ctx.lineTo(canvas.width, verticalMid);
+                    ctx.stroke();
+
+                    if (isTracking) {
+                        performTracking();
+                    }
+
+                    animationFrameRef.current = requestAnimationFrame(draw);
+                };
+
+                draw();
+            };
+
+            const performTracking = async () => {
+                if (!poseDetectorRef.current || !videoRef.current) return;
+
+                try {
+                    const poses = await poseDetectorRef.current.estimatePoses(videoRef.current);
+                    
+                    if (poses.length > 0) {
+                        const nose = poses[0].keypoints.find(kp => kp.name === 'nose');
+                        
+                        if (nose && nose.score > 0.3) {
+                            const canvas = canvasRef.current;
+                            const leftBound = canvas.width * (horizontalThresholdRef.current / 100);
+                            const rightBound = canvas.width * (1 - horizontalThresholdRef.current / 100);
+                            const verticalMid = canvas.height * (verticalThresholdRef.current / 100);
+
+                            let targetScene = secondarySceneRef.current;
+                            
+                            if (nose.x >= leftBound && nose.x <= rightBound && nose.y < verticalMid) {
+                                targetScene = mainSceneRef.current;
+                            }
+
+                            const now = Date.now();
+                            if (now - lastSwitchTimeRef.current > switchDelayRef.current * 1000) {
+                                if (targetScene !== currentScene) {
+                                    switchScene(targetScene);
+                                    setCurrentScene(targetScene);
+                                    lastSwitchTimeRef.current = now;
+                                }
+                            }
+
+                            const ctx = canvas.getContext('2d');
+                            ctx.fillStyle = '#00FF00';
+                            ctx.beginPath();
+                            ctx.arc(nose.x, nose.y, 8, 0, 2 * Math.PI);
+                            ctx.fill();
+                        }
+                    }
+                } catch (error) {
+                    console.error('Tracking error:', error);
+                }
+            };
+
+            const switchScene = (sceneName) => {
+                if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+
+                wsRef.current.send(JSON.stringify({
+                    op: 6,
+                    d: {
+                        requestType: 'SetCurrentProgramScene',
+                        requestId: Date.now().toString(),
+                        requestData: { sceneName: sceneName }
+                    }
+                }));
+                
+                setStatus(`Switched to: ${sceneName}`);
+            };
+
+            const startTracking = async () => {
+                if (!cameraActive) {
+                    setStatus('Please start camera first');
+                    return;
+                }
+                
+                if (!poseDetectorRef.current) {
+                    setStatus('Pose detector not ready - wait a moment');
+                    return;
+                }
+                
+                try {
+                    setStatus('Connecting to OBS...');
+                    const ws = await connectOBS();
+                    if (!ws) {
+                        setStatus('Failed to connect to OBS - check connection settings');
+                        return;
+                    }
+                    
+                    wsRef.current = ws;
+                    setIsTracking(true);
+                    setStatus('Tracking active');
+                } catch (error) {
+                    console.error('Start tracking error:', error);
+                    setStatus(`Failed to start tracking: ${error.message}`);
+                }
+            };
+
+            const stopTracking = () => {
+                setIsTracking(false);
+                setStatus('Tracking stopped');
+                if (wsRef.current) {
+                    wsRef.current.close();
+                    wsRef.current = null;
+                }
+            };
+
+            const snapValue = (value, snapPoints, tolerance = 2) => {
+                for (const point of snapPoints) {
+                    if (Math.abs(value - point) < tolerance) return point;
+                }
+                return Math.round(value / 5) * 5;
+            };
+
+            return (
+                <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 text-white p-6">
+                    <div className="max-w-7xl mx-auto">
+                        <h1 className="text-4xl font-bold mb-8 flex items-center gap-3">
+                            <Monitor />
+                            FaceFlow
+                        </h1>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            <div className="space-y-6">
+                                <div className="bg-gray-800 rounded-lg p-6 shadow-lg">
+                                    <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+                                        <Settings />
+                                        OBS Connection (Websocket)
+                                    </h2>
+                                    <div className="space-y-3">
+                                        <div>
+                                            <label className="block text-sm mb-1">Host</label>
+                                            <input type="text" disabled value={obsHost} onChange={(e) => setObsHost(e.target.value)}
+                                                className="w-full px-3 py-2 bg-gray-700 rounded border border-gray-600 focus:border-blue-500 focus:outline-none" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm mb-1">Port</label>
+                                            <input type="number" value={obsPort} onChange={(e) => setObsPort(parseInt(e.target.value))}
+                                                className="w-full px-3 py-2 bg-gray-700 rounded border border-gray-600 focus:border-blue-500 focus:outline-none" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm mb-1">Password</label>
+                                            <input type="password" value={obsPassword} onChange={(e) => setObsPassword(e.target.value)}
+                                                className="w-full px-3 py-2 bg-gray-700 rounded border border-gray-600 focus:border-blue-500 focus:outline-none" />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="bg-gray-800 rounded-lg p-6 shadow-lg">
+                                    <h2 className="text-xl font-semibold mb-4">Scenes</h2>
+                                    <div className="space-y-3">
+                                        <div>
+                                            <label className="block text-sm mb-1">Main Scene</label>
+                                            <select value={mainScene} onChange={(e) => setMainScene(e.target.value)}
+                                                className="w-full px-3 py-2 bg-gray-700 rounded border border-gray-600 focus:border-blue-500 focus:outline-none">
+                                                {scenes.map(scene => <option key={scene} value={scene}>{scene}</option>)}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm mb-1">Secondary Scene</label>
+                                            <select value={secondaryScene} onChange={(e) => setSecondaryScene(e.target.value)}
+                                                className="w-full px-3 py-2 bg-gray-700 rounded border border-gray-600 focus:border-blue-500 focus:outline-none">
+                                                {scenes.map(scene => <option key={scene} value={scene}>{scene}</option>)}
+                                            </select>
+                                        </div>
+                                        <button onClick={refreshScenes}
+                                            className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded flex items-center justify-center gap-2 transition">
+                                            <RefreshCw />
+                                            Refresh Scenes
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="bg-gray-800 rounded-lg p-6 shadow-lg">
+                                    <h2 className="text-xl font-semibold mb-4">Settings</h2>
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="block text-sm mb-2">Switch Delay: {switchDelay}s</label>
+                                            <input type="range" min="0.5" max="10" step="0.5" value={switchDelay}
+                                                onChange={(e) => setSwitchDelay(parseFloat(e.target.value))} className="w-full" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm mb-2">Horizontal Zone: {horizontalThreshold.toFixed(2)}%</label>
+                                            <input type="range" min="5" max="50" step="0.1" value={horizontalThreshold}
+                                                onChange={(e) => setHorizontalThreshold(snapValue(parseFloat(e.target.value), [33.33]))} className="w-full" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm mb-2">Vertical Zone: {verticalThreshold.toFixed(2)}%</label>
+                                            <input type="range" min="5" max="95" step="0.1" value={verticalThreshold}
+                                                onChange={(e) => setVerticalThreshold(snapValue(parseFloat(e.target.value), [33.33, 66.67]))} className="w-full" />
+                                        </div>
+                                        <button onClick={() => { setHorizontalThreshold(33.33); setVerticalThreshold(66.67); setSwitchDelay(2.0); }}
+                                            className="w-full px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded transition">
+                                            Reset to Default
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="bg-gray-800 rounded-lg p-6 shadow-lg space-y-3">
+                                    <div>
+                                        <label className="block text-sm mb-1">Tracking Camera</label>
+                                        <select value={selectedCamera} onChange={(e) => setSelectedCamera(e.target.value)}
+                                            disabled={cameraActive}
+                                            className="w-full px-3 py-2 bg-gray-700 rounded border border-gray-600 focus:border-blue-500 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed">
+                                            {availableCameras.length === 0 && (
+                                                <option value="">No cameras found</option>
+                                            )}
+                                            {availableCameras.map(camera => (
+                                                <option key={camera.deviceId} value={camera.deviceId}>
+                                                    {camera.label || `Camera ${camera.deviceId.substring(0, 8)}`}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <button onClick={loadCameras} disabled={cameraActive}
+                                            className="w-full mt-2 px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded text-sm transition disabled:opacity-50 disabled:cursor-not-allowed">
+                                            Refresh Cameras
+                                        </button>
+                                    </div>
+                                    
+                                    <button onClick={cameraActive ? stopCamera : startCamera}
+                                        className={`w-full px-4 py-3 rounded flex items-center justify-center gap-2 transition ${
+                                            cameraActive ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}`}>
+                                        <Camera />
+                                        {cameraActive ? 'Stop Camera' : 'Start Camera'}
+                                    </button>
+                                    
+                                    <button onClick={isTracking ? stopTracking : startTracking} disabled={!cameraActive}
+                                        className={`w-full px-4 py-3 rounded flex items-center justify-center gap-2 transition ${
+                                            !cameraActive ? 'bg-gray-600 cursor-not-allowed' :
+                                            isTracking ? 'bg-orange-600 hover:bg-orange-700' : 'bg-blue-600 hover:bg-blue-700'}`}>
+                                        {isTracking ? <Square /> : <Play />}
+                                        {isTracking ? 'Stop Tracking' : 'Start Tracking'}
+                                    </button>
+                                    
+                                    <div className="text-center py-2 bg-gray-700 rounded">
+                                        <p className="text-sm font-semibold">{status}</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="lg:col-span-2">
+                                <div className="bg-gray-800 rounded-lg p-6 shadow-lg">
+                                    <h2 className="text-xl font-semibold mb-4">Tracking Preview</h2>
+                                    <div className="relative bg-black rounded-lg overflow-hidden" style={{ aspectRatio: '16/9' }}>
+                                        <video ref={videoRef} autoPlay playsInline muted className="absolute inset-0 w-full h-full object-contain hidden" />
+                                        <canvas ref={canvasRef} className="w-full h-full object-contain" />
+                                        {!cameraActive && (
+                                            <div className="absolute inset-0 flex items-center justify-center">
+                                                <p className="text-gray-500 text-lg">Camera not active</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                    
+                                    <div className="mt-4 p-4 bg-gray-700 rounded">
+                                        <h3 className="font-semibold mb-2">Detection Zones:</h3>
+                                        <ul className="text-sm space-y-1">
+                                            <li><span className="text-yellow-400">■ </span> Yellow lines: Horizontal boundaries</li>
+                                            <li><span className="text-cyan-400">■ </span> Cyan line: Vertical boundary</li>
+                                            <li><span className="text-green-400">●</span> Green dot: Tracked nose position</li>
+                                            <li className="mt-2 text-gray-300">Face in center upper zone → Main scene</li>
+                                            <li className="text-gray-300">Face outside zone → Secondary scene</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        ReactDOM.render(<OBSTrackerApp />, document.getElementById('root'));
+    </script>
+</body>
+</html>
