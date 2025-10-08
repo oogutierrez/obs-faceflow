@@ -31,10 +31,13 @@ Before starting, make sure you have the following:
 In OBS Studio:
 1. Go to **Tools → WebSocket Server Settings**  
 2. Check ✅ **Enable WebSocket Server**  
-3. (Optional) If **Enable Authentication** is checked:
+3. If **Enable Authentication** is checked:
    - Click **Show Connect Info** and copy the **Server Password**
    - You’ll need this password later  
    *(Alternatively, you can uncheck "Enable Authentication" for easier setup.)*
+
+(Optional): Setup and **Start Virtual Camera** in OBS.  
+This is especially useful if you want to use the same camera that is already in use by OBS.
 
 ---
 
@@ -88,7 +91,7 @@ Once the interface loads:
 - Verify that no firewall or antivirus is blocking the connection  
 
 **Camera not detected?**
-- Make sure no other application is using the same camera  
+- Make sure no other application is using the same camera, or choose an OBS Virtual Camera  
 - Try refreshing the page or restarting the local server  
 
 **Scenes not showing up?**
@@ -123,7 +126,9 @@ You are free to use, modify, and distribute this software with attribution.
 ---
 
 ## 💡 Credits
-Developed with ❤️ by **Orlando Gutierrez**  
+Developed with ❤️ by **Orlando Gutierrez**
+If you find this project useful and would like to consider [donating via PayPal](https://paypal.me/oogutierrezpaypal).  
+
 Powered by:
 - [OBS WebSocket](https://github.com/obsproject/obs-websocket)  
 - Modern Browser APIs (WebRTC, WebSocket, MediaDevices)
