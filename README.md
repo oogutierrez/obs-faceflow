@@ -126,7 +126,7 @@ You are free to use, modify, and distribute this software with attribution.
 ---
 
 ## 💡 Credits
-Developed with ❤️ by **Orlando Gutierrez**
+Developed with ❤️ by **Orlando Gutierrez**.  
 If you find this project useful and would like to consider [donating via PayPal](https://paypal.me/oogutierrezpaypal).  
 
 Powered by:
