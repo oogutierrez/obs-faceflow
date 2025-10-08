@@ -41,7 +41,18 @@ This is especially useful if you want to use the same camera that is already in 
 
 ---
 
-### 2. Start Local Server
+### 2. Download and extract the files of this project
+In the main branch of this github repo, click **<> Code** then **Download Zip**
+![alt text](images/downloadzip.png)
+
+Extract the downloaded zip file.
+
+---
+
+### 3. Start Local Server
+
+Open your terminal or command line and cd to the project directory where you can find the index.hmtl file.
+
 Run the following command in your project directory:
 
 ```bash
@@ -52,14 +63,14 @@ This launches a lightweight local web server at **http://127.0.0.1:3001**.
 
 ---
 
-### 3. Allow Camera Access
+### 4. Allow Camera Access
 When prompted by your browser:
 - Allow access to your **camera**
 - Select the camera you’ll use for **tracking**
 
 ---
 
-### 4. Connect to OBS
+### 5. Connect to OBS
 Once the interface loads:
 
 1. Enter the **WebSocket password** from OBS (if authentication is enabled)  
@@ -68,7 +79,7 @@ Once the interface loads:
 
 ---
 
-### 5. Start Tracking
+### 6. Start Tracking
 1. Under **Tracking Camera**, click **Start Camera**  
 2. Adjust **Settings** as desired (e.g., switch delay, zones)  
 3. Click **Start Tracking** to begin automatic switching between scenes  
