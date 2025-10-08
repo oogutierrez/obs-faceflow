@@ -1,5 +1,5 @@
 # FaceFlow 🎥  
-**Automatic Scene Switching for OBS Based on Face Tracking**
+**Automatic Scene Switching for OBS based on Face Tracking**
 
 FaceFlow is a lightweight browser-based tool that automatically switches between a **Main Scene** and a **Secondary Scene** in OBS Studio — depending on the location of a person detected through a tracking camera.  
 Ideal for streamers, presenters, and content creators who want hands-free, intelligent scene control.
@@ -89,7 +89,7 @@ Once the interface loads:
 ## 🧠 How It Works
 - The tracking camera monitors your face’s position in real time  
 - If you move outside a defined boundary or zone, FaceFlow automatically tells OBS (via WebSocket) to switch to the **Secondary Scene**  
-- When you return to the tracked area, it switches back to the **Main Scene**  
+- When you return to the main zone, it switches back to the **Main Scene**  
 - You can fine-tune the behavior in the **Settings** panel  
 
 ---
