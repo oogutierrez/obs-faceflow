@@ -91,7 +91,8 @@ Once the interface loads:
 - If you move outside a defined boundary or zone, FaceFlow automatically tells OBS (via WebSocket) to switch to the **Secondary Scene**  
 - When you return to the main zone, it switches back to the **Main Scene**  
 - You can fine-tune the behavior in the **Settings** panel  
-- [![Watch the video](images/thumbnail-obsfaceflow-youtube.png)](https://www.youtube.com/watch?v=bG6ang9wR6k)
+- [Watch the video](https://www.youtube.com/watch?v=bG6ang9wR6k)  
+[![Thumbnail](images/thumbnail-obsfaceflow-youtube.png)](https://www.youtube.com/watch?v=bG6ang9wR6k)
 
 ---
 
