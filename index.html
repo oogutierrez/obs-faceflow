@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,9 +12,10 @@
     <script src="./js/pose-detection.min.js"></script>
     <script src="css/tailwind.min.css"></script>
 </head>
+
 <body>
     <div id="root"></div>
-    
+
     <script type="text/babel">
         const { useState, useRef, useEffect } = React;
 
@@ -67,7 +69,7 @@
             const [mainScene, setMainScene] = useState(localStorage.getItem('mainScene') || 'main');
             const [secondaryScene, setSecondaryScene] = useState(localStorage.getItem('secondaryScene') || 'secondary');
             const [scenes, setScenes] = useState(JSON.parse(localStorage.getItem('scenes') || '["main", "secondary"]'));
-            
+
             const [switchDelay, setSwitchDelay] = useState(parseFloat(localStorage.getItem('switchDelay')) || 2.0);
             const [horizontalThreshold, setHorizontalThreshold] = useState(parseFloat(localStorage.getItem('horizontalThreshold')) || 33.33);
             const [verticalThreshold, setVerticalThreshold] = useState(parseFloat(localStorage.getItem('verticalThreshold')) || 66.67);
@@ -77,7 +79,7 @@
             const [currentScene, setCurrentScene] = useState(null);
             const [availableCameras, setAvailableCameras] = useState([]);
             const [selectedCamera, setSelectedCamera] = useState(localStorage.getItem('selectedCamera') || '');
-            
+
             const videoRef = useRef(null);
             const canvasRef = useRef(null);
             const wsRef = useRef(null);
@@ -126,39 +128,39 @@
             useEffect(() => {
                 // Load available cameras on mount
                 loadCameras();
-// 🔄 Listen for permission or device changes
-    navigator.mediaDevices.addEventListener('devicechange', loadCameras);
+                // 🔄 Listen for permission or device changes
+                navigator.mediaDevices.addEventListener('devicechange', loadCameras);
 
-    // 🧹 Clean up listener when component unmounts
-    return () => {
-        navigator.mediaDevices.removeEventListener('devicechange', loadCameras);
-    };
+                // 🧹 Clean up listener when component unmounts
+                return () => {
+                    navigator.mediaDevices.removeEventListener('devicechange', loadCameras);
+                };
             }, []);
 
-    const loadCameras = async () => {
-        try {
-            // Ask for permission if not granted
-            await navigator.mediaDevices.getUserMedia({ video: true });
+            const loadCameras = async () => {
+                try {
+                    // Ask for permission if not granted
+                    await navigator.mediaDevices.getUserMedia({ video: true });
 
-            const devices = await navigator.mediaDevices.enumerateDevices();
-            const videoDevices = devices.filter(device => device.kind === 'videoinput');
-            setAvailableCameras(videoDevices);
+                    const devices = await navigator.mediaDevices.enumerateDevices();
+                    const videoDevices = devices.filter(device => device.kind === 'videoinput');
+                    setAvailableCameras(videoDevices);
 
-            // Detect the currently active camera
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-            const track = stream.getVideoTracks()[0];
-            const currentDeviceId = track.getSettings().deviceId;
+                    // Detect the currently active camera
+                    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    const track = stream.getVideoTracks()[0];
+                    const currentDeviceId = track.getSettings().deviceId;
 
-            // Stop the temporary stream (we only needed info)
-            stream.getTracks().forEach(t => t.stop());
+                    // Stop the temporary stream (we only needed info)
+                    stream.getTracks().forEach(t => t.stop());
 
-            // Update selected camera
-            setSelectedCamera(currentDeviceId || (videoDevices[0]?.deviceId ?? ''));
-        } catch (error) {
-            console.error('Failed to enumerate cameras:', error);
-            setStatus('Failed to load cameras');
-        }
-    };
+                    // Update selected camera
+                    setSelectedCamera(currentDeviceId || (videoDevices[0]?.deviceId ?? ''));
+                } catch (error) {
+                    console.error('Failed to enumerate cameras:', error);
+                    setStatus('Failed to load cameras');
+                }
+            };
 
             useEffect(() => {
                 const loadPoseDetection = async () => {
@@ -167,10 +169,10 @@
                             // Wait for TensorFlow to be ready and set backend
                             await window.tf.ready();
                             await window.tf.setBackend('webgl');
-                            
+
                             const detector = await window.poseDetection.createDetector(
                                 window.poseDetection.SupportedModels.MoveNet,
-                                { 
+                                {
                                     modelType: window.poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING,
                                     modelUrl: './models/movenet/singlepose/lightning/model.json'
                                 }
@@ -210,10 +212,10 @@
                     const wsUrl = `ws://${obsHost}:${obsPort}`;
                     console.log('Connecting to OBS at:', wsUrl);
                     const ws = new WebSocket(wsUrl);
-                    
+
                     return new Promise((resolve, reject) => {
                         let resolved = false;
-                        
+
                         ws.onopen = () => {
                             console.log('WebSocket opened');
                         };
@@ -221,32 +223,32 @@
                         ws.onmessage = async (event) => {
                             const data = JSON.parse(event.data);
                             console.log('OBS Message:', data);
-                            
+
                             // op: 0 is Hello message from OBS
                             if (data.op === 0) {
                                 console.log('Received Hello from OBS');
-                                
+
                                 const identifyMsg = {
                                     op: 1,
-                                    d: { 
+                                    d: {
                                         rpcVersion: 1
                                     }
                                 };
-                                
+
                                 // Handle authentication if required
                                 if (data.d.authentication && obsPassword) {
                                     const { challenge, salt } = data.d.authentication;
-                                    
+
                                     // Create SHA256 hash: Base64(SHA256(password + salt))
                                     const secret = obsPassword + salt;
                                     const secretHash = await sha256(secret);
                                     const secretBase64 = btoa(String.fromCharCode(...new Uint8Array(secretHash)));
-                                    
+
                                     // Create authentication string: Base64(SHA256(secretBase64 + challenge))
                                     const authString = secretBase64 + challenge;
                                     const authHash = await sha256(authString);
                                     const authBase64 = btoa(String.fromCharCode(...new Uint8Array(authHash)));
-                                    
+
                                     identifyMsg.d.authentication = authBase64;
                                     console.log('Using authenticated connection');
                                 } else if (data.d.authentication && !obsPassword) {
@@ -254,11 +256,11 @@
                                 } else {
                                     console.log('No authentication required');
                                 }
-                                
+
                                 ws.send(JSON.stringify(identifyMsg));
                                 console.log('Sent Identify');
                             }
-                            
+
                             // op: 2 is Identified (connection successful)
                             if (data.op === 2 && !resolved) {
                                 console.log('Successfully identified with OBS');
@@ -304,7 +306,7 @@
 
             const refreshScenes = async () => {
                 setStatus('Fetching scenes from OBS...');
-                
+
                 try {
                     const ws = await connectOBS();
                     if (!ws) {
@@ -325,12 +327,12 @@
                     // Listen for response
                     ws.onmessage = (event) => {
                         const data = JSON.parse(event.data);
-                        
+
                         if (data.op === 7 && data.d.requestId === requestId) {
                             const sceneNames = data.d.responseData.scenes.map(s => s.sceneName);
                             setScenes(sceneNames);
                             setStatus(`Found ${sceneNames.length} scenes`);
-                            
+
                             if (sceneNames.length > 0) {
                                 if (!mainScene || !sceneNames.includes(mainScene)) {
                                     setMainScene(sceneNames[0]);
@@ -339,7 +341,7 @@
                                     setSecondaryScene(sceneNames[1] || sceneNames[0]);
                                 }
                             }
-                            
+
                             ws.close();
                         }
                     };
@@ -355,31 +357,31 @@
                         setStatus('Please select a camera first');
                         return;
                     }
-                    
+
                     const constraints = {
-                        video: { 
+                        video: {
                             deviceId: { exact: selectedCamera },
-                            width: 1280, 
-                            height: 720 
+                            width: 1280,
+                            height: 720
                         }
                     };
-                    
+
                     const selectedDevice = availableCameras.find(cam => cam.deviceId === selectedCamera);
                     if (selectedDevice) {
                         setStatus(`Using: ${selectedDevice.label}`);
                     }
-                    
+
                     const stream = await navigator.mediaDevices.getUserMedia(constraints);
-                    
+
                     if (videoRef.current) {
                         videoRef.current.srcObject = stream;
                         streamRef.current = stream;
-                        
+
                         videoRef.current.onloadedmetadata = () => {
                             console.log('Video metadata loaded:', videoRef.current.videoWidth, 'x', videoRef.current.videoHeight);
                             setCameraActive(true);
                         };
-                        
+
                         // Also try to play the video explicitly
                         videoRef.current.play().catch(e => console.error('Play failed:', e));
                     }
@@ -406,11 +408,11 @@
                 if (animationFrameRef.current) {
                     cancelAnimationFrame(animationFrameRef.current);
                 }
-                
+
                 const draw = () => {
                     const video = videoRef.current;
                     const canvas = canvasRef.current;
-                    
+
                     if (!video || !canvas || !cameraActive) {
                         return;
                     }
@@ -461,10 +463,10 @@
 
                 try {
                     const poses = await poseDetectorRef.current.estimatePoses(videoRef.current);
-                    
+
                     if (poses.length > 0) {
                         const nose = poses[0].keypoints.find(kp => kp.name === 'nose');
-                        
+
                         if (nose && nose.score > 0.3) {
                             const canvas = canvasRef.current;
                             const leftBound = canvas.width * (horizontalThresholdRef.current / 100);
@@ -472,18 +474,20 @@
                             const verticalMid = canvas.height * (verticalThresholdRef.current / 100);
 
                             let targetScene = secondarySceneRef.current;
-                            
+
                             if (nose.x >= leftBound && nose.x <= rightBound && nose.y < verticalMid) {
                                 targetScene = mainSceneRef.current;
                             }
 
                             const now = Date.now();
                             if (now - lastSwitchTimeRef.current > switchDelayRef.current * 1000) {
-                                if (targetScene !== currentScene) {
+                                console.log(currentScene, '->', targetScene);
+                                //if (targetScene !== currentScene) {
+                                    console.log('Switching scene to:', targetScene);
                                     switchScene(targetScene);
                                     setCurrentScene(targetScene);
                                     lastSwitchTimeRef.current = now;
-                                }
+                                //}
                             }
 
                             const ctx = canvas.getContext('2d');
@@ -509,7 +513,7 @@
                         requestData: { sceneName: sceneName }
                     }
                 }));
-                
+
                 setStatus(`Switched to: ${sceneName}`);
             };
 
@@ -518,12 +522,12 @@
                     setStatus('Please start camera first');
                     return;
                 }
-                
+
                 if (!poseDetectorRef.current) {
                     setStatus('Pose detector not ready - wait a moment');
                     return;
                 }
-                
+
                 try {
                     setStatus('Connecting to OBS...');
                     const ws = await connectOBS();
@@ -531,7 +535,7 @@
                         setStatus('Failed to connect to OBS - check connection settings');
                         return;
                     }
-                    
+
                     wsRef.current = ws;
                     setIsTracking(true);
                     setStatus('Tracking active');
@@ -661,22 +665,20 @@
                                             Refresh Cameras
                                         </button>
                                     </div>
-                                    
+
                                     <button onClick={cameraActive ? stopCamera : startCamera}
-                                        className={`w-full px-4 py-3 rounded flex items-center justify-center gap-2 transition ${
-                                            cameraActive ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}`}>
+                                        className={`w-full px-4 py-3 rounded flex items-center justify-center gap-2 transition ${cameraActive ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}`}>
                                         <Camera />
                                         {cameraActive ? 'Stop Camera' : 'Start Camera'}
                                     </button>
-                                    
+
                                     <button onClick={isTracking ? stopTracking : startTracking} disabled={!cameraActive}
-                                        className={`w-full px-4 py-3 rounded flex items-center justify-center gap-2 transition ${
-                                            !cameraActive ? 'bg-gray-600 cursor-not-allowed' :
-                                            isTracking ? 'bg-orange-600 hover:bg-orange-700' : 'bg-blue-600 hover:bg-blue-700'}`}>
+                                        className={`w-full px-4 py-3 rounded flex items-center justify-center gap-2 transition ${!cameraActive ? 'bg-gray-600 cursor-not-allowed' :
+                                                isTracking ? 'bg-orange-600 hover:bg-orange-700' : 'bg-blue-600 hover:bg-blue-700'}`}>
                                         {isTracking ? <Square /> : <Play />}
                                         {isTracking ? 'Stop Tracking' : 'Start Tracking'}
                                     </button>
-                                    
+
                                     <div className="text-center py-2 bg-gray-700 rounded">
                                         <p className="text-sm font-semibold">{status}</p>
                                     </div>
@@ -695,7 +697,7 @@
                                             </div>
                                         )}
                                     </div>
-                                    
+
                                     <div className="mt-4 p-4 bg-gray-700 rounded">
                                         <h3 className="font-semibold mb-2">Detection Zones:</h3>
                                         <ul className="text-sm space-y-1">
@@ -717,4 +719,5 @@
         ReactDOM.render(<OBSTrackerApp />, document.getElementById('root'));
     </script>
 </body>
+
 </html>
